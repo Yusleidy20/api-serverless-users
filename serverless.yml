@@ -1,0 +1,48 @@
+service: lambda-dynamodb-crud
+
+provider:
+  name: aws
+  runtime: java17
+  region: us-east-2
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:DeleteItem
+            - dynamodb:UpdateItem
+          Resource:
+            - "arn:aws:dynamodb:us-east-2:418295712215:table/usuarios"
+package:
+  artifact: target/api-serverles-users-1.0-SNAPSHOT.jar
+
+functions:
+  createUser:
+    handler: org.example.CreateUserHandler
+    events:
+      - http:
+          path: usuarios
+          method: post
+
+  getUser:
+    handler: org.example.GetUserHandler
+    events:
+      - http:
+          path: usuarios/{id}
+          method: get
+
+  updateUser:
+    handler: org.example.UpdateUserHandler
+    events:
+      - http:
+          path: usuarios/{id}
+          method: put
+
+  deleteUser:
+    handler: org.example.DeleteUserHandler
+    events:
+      - http:
+          path: usuarios/{id}
+          method: delete
