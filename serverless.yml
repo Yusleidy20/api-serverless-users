@@ -1,4 +1,4 @@
-service: lambda-dynamodb-crud
+service: lambda-dynamodb-crud-sqs
 
 provider:
   name: aws
@@ -15,8 +15,37 @@ provider:
             - dynamodb:UpdateItem
           Resource:
             - "arn:aws:dynamodb:us-east-2:418295712215:table/usuarios"
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource:
+            - "arn:aws:sqs:us-east-2:418295712215:UserCreationQueue"
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+          Resource:
+            - "arn:aws:sqs:us-east-2:418295712215:UserCreationQueue"
+        - Effect: Allow
+          Action:
+            - sns:Publish
+          Resource:
+            - "arn:aws:sns:us-east-2:418295712215:UserNotifications"
+
 package:
   artifact: target/api-serverles-users-1.0-SNAPSHOT.jar
+
+resources:
+  Resources:
+    UserCreationQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: UserCreationQueue
+
+    UserNotifications:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: UserNotifications
 
 functions:
   createUser:
@@ -25,24 +54,18 @@ functions:
       - http:
           path: usuarios
           method: post
+    environment:
+      USER_CREATION_QUEUE_URL:
+        Ref: UserCreationQueue
 
-  getUser:
-    handler: org.example.GetUserHandler
+  sendEmail:
+    handler: org.example.SendEmailHandler
     events:
-      - http:
-          path: usuarios/{id}
-          method: get
-
-  updateUser:
-    handler: org.example.UpdateUserHandler
-    events:
-      - http:
-          path: usuarios/{id}
-          method: put
-
-  deleteUser:
-    handler: org.example.DeleteUserHandler
-    events:
-      - http:
-          path: usuarios/{id}
-          method: delete
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - UserCreationQueue
+              - Arn
+    environment:
+      SNS_TOPIC_ARN:
+        Ref: UserNotifications
