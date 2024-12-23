@@ -3,16 +3,20 @@ package org.example;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
-import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 import java.util.Map;
 import java.util.UUID;
 
 public class CreateUserHandler implements RequestHandler<Map<String, Object>, Map<String, Object>> {
+    private static final String QUEUE_URL = System.getenv("USER_CREATION_QUEUE_URL");
+
     @Override
     public Map<String, Object> handleRequest(Map<String, Object> event, Context context) {
         try {
+            context.getLogger().log("Received event: " + event);
+
             String body = (String) event.get("body");
             if (body == null || body.isEmpty()) {
                 return createResponse(400, "Body is required");
@@ -20,21 +24,19 @@ public class CreateUserHandler implements RequestHandler<Map<String, Object>, Ma
 
             ObjectMapper mapper = new ObjectMapper();
             Usuario usuario = mapper.readValue(body, Usuario.class);
-
             usuario.setId(usuario.getId() == null ? UUID.randomUUID().toString() : usuario.getId());
 
-            PutItemRequest request = PutItemRequest.builder()
-                    .tableName("usuarios")
-                    .item(Map.of(
-                            "id", AttributeValue.builder().s(usuario.getId()).build(),
-                            "userName", AttributeValue.builder().s(usuario.getUserName()).build(),
-                            "email", AttributeValue.builder().s(usuario.getEmail()).build()
-                    ))
+            SqsClient sqsClient = SqsClient.create();
+            SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
+                    .queueUrl(QUEUE_URL)
+                    .messageBody(mapper.writeValueAsString(usuario))
                     .build();
+            sqsClient.sendMessage(sendMessageRequest);
 
-            DynamoDBClient.getClient().putItem(request);
-            return createResponse(200, "Created: " + usuario.getId());
+            context.getLogger().log("Message sent to SQS: " + usuario.getId());
+            return createResponse(200, "User created and message sent to SQS: " + usuario.getId());
         } catch (Exception e) {
+            context.getLogger().log("Error: " + e.getMessage());
             return createResponse(500, "Error: " + e.getMessage());
         }
     }
